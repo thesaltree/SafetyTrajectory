@@ -119,7 +119,7 @@ Plotting jailbreak rate (x-axis) against penalized MTTC (y-axis) separates model
 
 ```
 High MTTC |  Robust           |  Resistant but Vulnerable
-          |  (qwen, claude)   |  (gemini)
+          |  (qwen, claude)   |  (gemini, llama, deepseek)
           |                   |
           |-------------------|-------------------
           |  Fragile          |  Weak Alignment
