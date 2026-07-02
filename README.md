@@ -1,6 +1,5 @@
-# SafetyTrajectory
+# SafetyTrajectory - Multi-turn behavioral trajectory evaluation for LLM safety alignment
 
-**Multi-turn behavioral trajectory evaluation for LLM safety alignment.**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-gray.svg)](LICENSE)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
@@ -94,7 +93,7 @@ A GDR of 1.0 means compliance rose and safety language collapsed simultaneously 
 - `qwen3.7-max` and `claude-opus-4.8` had the lowest jailbreak rates (40%) and the highest MTTC values (8.0 and 7.6), indicating that when they did fail, it required sustained multi-turn pressure.
 - `gemini-3.5-flash` had a 60% jailbreak rate but the second-highest MTTC (7.8), suggesting resistance over many turns before alignment broke down.
 - Misinformation was the most consistently exploitable category across all models (100% jailbreak rate). Data Theft was the most resistant (17%).
-- GDR was zero for several models despite jailbreaks occurring. This indicates compliance rose without a corresponding collapse in hedging — the model provided harmful content while maintaining surface-level safety language.
+- GDR was zero for several models despite jailbreaks occurring. This indicates compliance rose without a corresponding collapse in hedging, the model provided harmful content while maintaining surface-level safety language.
   
 #### 2D Safety Frontier scatter plot
 <img width="1465" height="783" alt="Screenshot 2026-07-02 at 11 27 31 PM" src="https://github.com/user-attachments/assets/b8c28101-806a-40e0-a40a-654f6947f959" />
