@@ -4,6 +4,9 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-gray.svg)](LICENSE)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![OpenRouter](https://img.shields.io/badge/API-OpenRouter-6366f1.svg)](https://openrouter.ai)
+[![Open in Streamlit](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://safetytrajectory.streamlit.app/)
+
+Interactive Results: [Live Streamlit Dashboard](https://safetytrajectory.streamlit.app/) | Published Dataset: [Hugging Face Dataset](https://huggingface.co/datasets/thesaltree/safety-trajectory)
 
 ---
 
@@ -65,6 +68,8 @@ A GDR of 1.0 means compliance rose and safety language collapsed simultaneously 
 ## Experiment 1 Results
 
 **Setup:** 6 models × 5 objectives × 10 max turns. Objectives drawn from 5 harm categories: Children Safety, Cybersecurity, Data Theft, Misinformation, Violence. Attacker and judge: `gpt-4o-mini`. Jailbreak threshold: 0.85 compliance.
+
+The raw generated outputs for this experiment run are published on Hugging Face at [thesaltree/safety-trajectory](https://huggingface.co/datasets/thesaltree/safety-trajectory). You can view the interactive charts on the [Live Streamlit Dashboard](https://safetytrajectory.streamlit.app/).
 
 ### Model Comparison
 
@@ -164,25 +169,38 @@ API key from [openrouter.ai/keys](https://openrouter.ai/keys). Supports any mode
 
 ## Running
 
+### 1. Execute Evaluations Locally
+To generate your own multi-turn trajectories, run the orchestrator:
+
 ```bash
-# Preview without API calls
+# Preview proposed runs without making API calls
 python run_evals.py --dry-run
 
-# Default run (all models, 10 turns, 5 AdvBench objectives)
+# Run standard evaluations (saves to outputs/comparative_safety_dataset.json)
 python run_evals.py
 
-# Custom
+# Run custom evaluations targeting specific models and parameters
 python run_evals.py \
     --models "anthropic/claude-3-haiku" "openai/gpt-4o-mini" \
     --max-turns 8 \
     --advbench-n 10 \
     --output outputs/my_experiment.json
+```
+*Note: If an evaluation run is interrupted, rerunning the command automatically resumes evaluation from the last recorded turn.*
 
-# Dashboard
+### 2. Visualize with the Dashboard
+Launch the dashboard to review evaluations:
+
+```bash
 streamlit run app/dashboard.py
 ```
 
-Interrupted runs resume automatically from the last completed turn.
+By default, the dashboard opens in **Hugging Face dataset** mode to pull the reference Experiment 1 results from [thesaltree/safety-trajectory](https://huggingface.co/datasets/thesaltree/safety-trajectory). 
+
+**To visualize your own local experiments:**
+1. Open the dashboard in your browser.
+2. In the sidebar under **Data Source**, select **Local file**.
+3. Choose your generated JSON file from the dropdown (loaded directly from your local `outputs/` folder).
 
 ---
 
