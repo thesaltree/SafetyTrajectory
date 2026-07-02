@@ -7,6 +7,7 @@ import numpy as np
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
+import requests
 import streamlit as st
 
 st.set_page_config(
@@ -17,6 +18,13 @@ st.set_page_config(
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 _OUTPUT_PATH = _REPO_ROOT / "outputs" / "comparative_safety_dataset.json"
+
+# ---------------------------------------------------------------------------
+# Hugging Face dataset source (used in deployed Streamlit app)
+# Dataset: https://huggingface.co/datasets/thesaltree/safety-trajectory
+# ---------------------------------------------------------------------------
+_HF_BASE_URL = "https://huggingface.co/datasets/thesaltree/safety-trajectory/resolve/main/"
+_HF_DEFAULT_FILE = "safety_trajectory_6x5.json"
 
 _METRIC_COLS = ["compliance", "hedging", "sycophancy", "deception_markers"]
 _METRIC_LABELS = {
@@ -110,14 +118,40 @@ st.markdown(
 
 
 def get_available_json_files() -> list[Path]:
+    """Returns local JSON files from the outputs directory.
+    Used when running the dashboard locally after producing your own experiment results.
+    """
     outputs_dir = _REPO_ROOT / "outputs"
     if not outputs_dir.exists():
         return []
     return sorted(list(outputs_dir.glob("*.json")))
 
 
+@st.cache_data(ttl=3600)
+def load_dataset_from_hf(filename: str) -> Optional[list[dict]]:
+    """Fetch an experiment JSON file from the Hugging Face dataset repository.
+    This is the primary data source for the deployed Streamlit app.
+    The dataset lives at: https://huggingface.co/datasets/thesaltree/safety-trajectory
+    """
+    url = _HF_BASE_URL + filename
+    try:
+        response = requests.get(url, timeout=30)
+        response.raise_for_status()
+        return response.json()
+    except Exception as exc:
+        st.error(f"Failed to load dataset from Hugging Face ({url}): {exc}")
+        return None
+
+
 @st.cache_data(ttl=15)
 def load_dataset(path: Path) -> Optional[list[dict]]:
+    """Load a local experiment JSON file.
+    ---------------------------------------------------------------------------
+    LOCAL USE: If you have cloned this repo and run your own evaluations with
+    run_evals.py, your results will appear in outputs/. Select your file from
+    the sidebar to visualize them here.
+    ---------------------------------------------------------------------------
+    """
     if not path.exists():
         return None
     try:
@@ -179,24 +213,60 @@ def calculate_gdr(compliance_series, hedging_series):
 
 
 def main() -> None:
-    st.sidebar.markdown("### Experiment Data Source")
-    
-    available_files = get_available_json_files()
-    file_options = {f.name: f for f in available_files}
-    
-    selected_file_name = st.sidebar.selectbox(
-        "Select Experiment File",
-        options=list(file_options.keys()),
-        index=list(file_options.keys()).index("new_experiment_1.json") if "new_experiment_1.json" in file_options else 0
+    # ---------------------------------------------------------------------------
+    # DATA SOURCE SELECTION
+    # ---------------------------------------------------------------------------
+    # The deployed app loads data directly from the Hugging Face dataset.
+    # If you are running locally after producing your own experiments, switch to
+    # "Local file" mode and select your output file from the outputs/ directory.
+    # ---------------------------------------------------------------------------
+    data_source = st.sidebar.radio(
+        "Data Source",
+        options=["Hugging Face dataset", "Local file"],
+        index=0,
+        help="'Hugging Face dataset' loads the published experiment results. "
+             "'Local file' reads from your own outputs/ directory."
     )
-    
-    custom_path_str = st.sidebar.text_input(
-        "Or Enter Custom Path",
-        value=str(file_options[selected_file_name]) if file_options else str(_OUTPUT_PATH)
-    )
-    
-    dataset_path = Path(custom_path_str)
-    
+
+    if data_source == "Hugging Face dataset":
+        # Hugging Face mode: list available files from the known dataset
+        hf_files = [_HF_DEFAULT_FILE]
+        selected_hf_file = st.sidebar.selectbox(
+            "Select Experiment File",
+            options=hf_files,
+        )
+        dataset = load_dataset_from_hf(selected_hf_file)
+        dataset_label = selected_hf_file
+
+    else:
+        # ---------------------------------------------------------------------------
+        # LOCAL MODE
+        # Run `python run_evals.py` first to generate output files in outputs/.
+        # Then select your file below to visualize your own experiment results.
+        # ---------------------------------------------------------------------------
+        available_files = get_available_json_files()
+        file_options = {f.name: f for f in available_files}
+
+        if not file_options:
+            st.warning(
+                "No experiment files found in outputs/. "
+                "Run `python run_evals.py` to generate results, then refresh."
+            )
+            st.stop()
+
+        selected_file_name = st.sidebar.selectbox(
+            "Select Experiment File",
+            options=list(file_options.keys()),
+            index=0
+        )
+        custom_path_str = st.sidebar.text_input(
+            "Or Enter Custom Path",
+            value=str(file_options[selected_file_name])
+        )
+        dataset_path = Path(custom_path_str)
+        dataset = load_dataset(dataset_path)
+        dataset_label = dataset_path.name
+
     st.sidebar.divider()
     st.sidebar.markdown("### Safety Parameters")
     jailbreak_threshold = st.sidebar.slider(
@@ -208,12 +278,10 @@ def main() -> None:
         help="Compliance score at or above which an evaluation is deemed a jailbreak."
     )
 
-    dataset = load_dataset(dataset_path)
-
     if dataset is None:
         st.warning(
-            f"No evaluation data found at `{dataset_path}`. "
-            "Please ensure you run a valid experiment first."
+            "No evaluation data found. "
+            "Check your data source selection in the sidebar."
         )
         st.stop()
 
@@ -317,7 +385,7 @@ def main() -> None:
 
     st.markdown('<div class="hero-title">SafetyTrajectory Audit Board</div>', unsafe_allow_html=True)
     st.markdown(
-        f'<div class="hero-subtitle">A Quantitative Evaluation of Jailbreak Persistence and Behavioral Drift · Loaded: <code>{dataset_path.name}</code></div>',
+        f'<div class="hero-subtitle">A Quantitative Evaluation of Jailbreak Persistence and Behavioral Drift · Loaded: <code>{dataset_label}</code></div>',
         unsafe_allow_html=True,
     )
 
