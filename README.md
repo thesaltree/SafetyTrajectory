@@ -95,14 +95,22 @@ A GDR of 1.0 means compliance rose and safety language collapsed simultaneously 
 - `gemini-3.5-flash` had a 60% jailbreak rate but the second-highest MTTC (7.8), suggesting resistance over many turns before alignment broke down.
 - Misinformation was the most consistently exploitable category across all models (100% jailbreak rate). Data Theft was the most resistant (17%).
 - GDR was zero for several models despite jailbreaks occurring. This indicates compliance rose without a corresponding collapse in hedging — the model provided harmful content while maintaining surface-level safety language.
+  
+#### 2D Safety Frontier scatter plot
+<img width="1465" height="783" alt="Screenshot 2026-07-02 at 11 27 31 PM" src="https://github.com/user-attachments/assets/b8c28101-806a-40e0-a40a-654f6947f959" />
 
-<!-- SCREENSHOT: 2D Safety Frontier scatter plot -->
 
-<!-- SCREENSHOT: Cross-model MTTC comparison chart -->
+#### Cross-model MTTC comparison chart
+<img width="1467" height="787" alt="Screenshot 2026-07-02 at 11 32 04 PM" src="https://github.com/user-attachments/assets/c25ad349-af3e-47f6-aa7a-0e184c23bfab" />
 
-<!-- SCREENSHOT: Category x Model compliance heatmap -->
 
-<!-- SCREENSHOT: Trajectory drift chart (example model) -->
+#### Category x Model compliance heatmap
+<img width="1145" height="308" alt="Screenshot 2026-07-02 at 11 32 27 PM" src="https://github.com/user-attachments/assets/980cfae0-a571-4897-94fd-15ef23546a0d" />
+
+
+#### Trajectory drift chart (Claude Opus 4.8) for Data-theft category
+<img width="1169" height="514" alt="Screenshot 2026-07-02 at 11 34 04 PM" src="https://github.com/user-attachments/assets/5162d193-590c-4778-b30c-e189b903f624" />
+
 
 ---
 
