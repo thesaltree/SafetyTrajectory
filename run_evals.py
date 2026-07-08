@@ -25,7 +25,7 @@ logging.basicConfig(
 logger = logging.getLogger("run_evals")
 
 DEFAULT_TARGET_MODELS = [
-    "claude-opus-4.8",
+    "anthropic/claude-opus-4.8",
     "google/gemini-3.5-flash",
     "openai/gpt-4o-mini",
     "qwen/qwen3.7-max",
@@ -34,6 +34,7 @@ DEFAULT_TARGET_MODELS = [
 ]
 DEFAULT_ADVBENCH_N = 5
 DEFAULT_TARGET_MAX_TOKENS = 512
+DEFAULT_MAX_CONCURRENCY = 4
 
 
 async def orchestrate(
@@ -43,6 +44,7 @@ async def orchestrate(
     target_max_tokens: int,
     dry_run: bool,
     output_file: Path,
+    max_concurrency: int = DEFAULT_MAX_CONCURRENCY,
 ) -> None:
     logger.info("Loading seed prompts…")
     seed_prompts = load_seed_prompts()
@@ -81,34 +83,34 @@ async def orchestrate(
     }
 
     client = get_async_client()
+    semaphore = asyncio.Semaphore(max_concurrency)
 
-    for obj in objectives:
-        for target_model in target_models:
-            key = (obj["objective_id"], target_model)
-            existing_traj = results_map.get(key)
+    def make_save_callback(k: tuple[str, str]):
+        def save_callback(current_traj: dict):
+            results_map[k] = current_traj
+            with open(output_file, "w", encoding="utf-8") as f:
+                json.dump(list(results_map.values()), f, indent=2, ensure_ascii=False)
+        return save_callback
 
-            if existing_traj:
-                has_enough_turns = len(existing_traj.get("turns", [])) >= max_turns
-                is_early_stopped = existing_traj.get("early_stopped", False)
-                if has_enough_turns or is_early_stopped:
-                    logger.info(
-                        "Skipping %s → %s (already completed: %d turns)",
-                        obj["objective_id"], target_model, len(existing_traj.get("turns", []))
-                    )
-                    continue
-                else:
-                    logger.info(
-                        "Resuming %s → %s from turn %d",
-                        obj["objective_id"], target_model, len(existing_traj["turns"]) + 1
-                    )
+    async def process(obj: dict, target_model: str) -> None:
+        key = (obj["objective_id"], target_model)
+        existing_traj = results_map.get(key)
 
-            def make_save_callback(k: tuple[str, str]):
-                def save_callback(current_traj: dict):
-                    results_map[k] = current_traj
-                    with open(output_file, "w", encoding="utf-8") as f:
-                        json.dump(list(results_map.values()), f, indent=2, ensure_ascii=False)
-                return save_callback
+        if existing_traj:
+            has_enough_turns = len(existing_traj.get("turns", [])) >= max_turns
+            is_early_stopped = existing_traj.get("early_stopped", False)
+            if has_enough_turns or is_early_stopped:
+                logger.info(
+                    "Skipping %s → %s (already completed: %d turns)",
+                    obj["objective_id"], target_model, len(existing_traj.get("turns", []))
+                )
+                return
+            logger.info(
+                "Resuming %s → %s from turn %d",
+                obj["objective_id"], target_model, len(existing_traj["turns"]) + 1
+            )
 
+        async with semaphore:
             try:
                 trajectory = await run_pair_loop(
                     objective=obj,
@@ -136,6 +138,12 @@ async def orchestrate(
                     exc,
                     exc_info=True,
                 )
+
+    await asyncio.gather(*(
+        process(obj, target_model)
+        for obj in objectives
+        for target_model in target_models
+    ))
 
     logger.info(
         "=== Evaluation complete — %d records saved to %s ===",
@@ -176,6 +184,12 @@ def parse_args() -> argparse.Namespace:
         help=f"Number of AdvBench prompts (default: {DEFAULT_ADVBENCH_N})",
     )
     parser.add_argument(
+        "--max-concurrency",
+        type=int,
+        default=DEFAULT_MAX_CONCURRENCY,
+        help=f"Max concurrent (objective, model) trajectories in flight (default: {DEFAULT_MAX_CONCURRENCY})",
+    )
+    parser.add_argument(
         "--dry-run",
         action="store_true",
         help="Preview runs without calling API.",
@@ -197,6 +211,7 @@ def main() -> None:
     logger.info("  Max turns     : %d", args.max_turns)
     logger.info("  Max tokens    : %d", args.target_max_tokens)
     logger.info("  AdvBench N    : %d", args.advbench_n)
+    logger.info("  Max concurrency: %d", args.max_concurrency)
     logger.info("  Dry run       : %s", args.dry_run)
     logger.info("  Output file   : %s", args.output)
 
@@ -208,6 +223,7 @@ def main() -> None:
             target_max_tokens=args.target_max_tokens,
             dry_run=args.dry_run,
             output_file=Path(args.output),
+            max_concurrency=args.max_concurrency,
         )
     )
 

@@ -1,6 +1,12 @@
 # Core LLM client
 openai>=1.40.0
 
+# Retry/backoff for transient API failures
+tenacity>=8.5.0
+
+# Exact token counting (replaces word-count heuristic)
+tiktoken>=0.7.0
+
 # Data loading & manipulation
 pandas>=2.2.0
 matplotlib>=3.9.0
