@@ -1,5 +1,6 @@
 import json
 import logging
+import sys
 from pathlib import Path
 from typing import Optional
 
@@ -9,6 +10,9 @@ import plotly.express as px
 import plotly.graph_objects as go
 import requests
 import streamlit as st
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from src.stats import wilson_ci
 
 st.set_page_config(
     layout="wide",
@@ -459,8 +463,18 @@ def main() -> None:
             avg_max_compliance=("max_compliance", "mean"),
             jailbreak_success_rate=("jailbroken", "mean"),
             avg_mttc=("turns_to_compliance", "mean"),  # Added MTTC
-            avg_block_rate=("block_rate", "mean")
+            avg_block_rate=("block_rate", "mean"),
+            n_trials=("jailbroken", "count"),
         ).reset_index()
+        st.caption(
+            "n_trials is the sample size behind each row's rate — rows with a small n "
+            "should be read as noisy estimates, not settled comparisons."
+        )
+        st.dataframe(
+            model_group[["model_short", "n_trials", "jailbreak_success_rate", "avg_mttc"]],
+            use_container_width=True,
+            hide_index=True,
+        )
         
         col_plot1, col_plot2 = st.columns(2)
         
@@ -514,27 +528,44 @@ def main() -> None:
             max_turns_limit = df_runs_filtered["num_turns"].max() if not df_runs_filtered.empty else 10
             for model in df_runs_filtered["target_model"].unique():
                 df_m = df_runs_filtered[df_runs_filtered["target_model"] == model]
+                n_trials = len(df_m)
+                successes = int(df_m["jailbroken"].sum())
                 jb_rate = df_m["jailbroken"].mean() * 100
                 mttc_val = df_m["turns_to_compliance"].mean() if not df_m.empty else 0.0
-                
+                ci_low, ci_high = wilson_ci(successes, n_trials)
+
                 model_mttc_data.append({
                     "model_short": model.split("/")[-1],
                     "jailbreak_rate": jb_rate,
                     "mttc": mttc_val,
+                    "n_trials": n_trials,
+                    "ci_low_pct": ci_low * 100,
+                    "ci_high_pct": ci_high * 100,
                 })
             df_scatter = pd.DataFrame(model_mttc_data)
-            
+            df_scatter["error_x"] = df_scatter["ci_high_pct"] - df_scatter["jailbreak_rate"]
+            df_scatter["error_x_minus"] = df_scatter["jailbreak_rate"] - df_scatter["ci_low_pct"]
+
             fig_scatter = px.scatter(
                 df_scatter,
                 x="jailbreak_rate",
                 y="mttc",
                 text="model_short",
+                error_x="error_x",
+                error_x_minus="error_x_minus",
+                hover_data={"n_trials": True, "ci_low_pct": ":.1f", "ci_high_pct": ":.1f"},
                 title=f"2D Safety Frontier: Jailbreak Rate vs. MTTC ({selected_category})",
                 labels={
                     "jailbreak_rate": "Jailbreak Success Rate (%)",
-                    "mttc": "Penalized Mean Turns to Compliance (MTTC)"
+                    "mttc": "Penalized Mean Turns to Compliance (MTTC)",
+                    "n_trials": "Trials (n)",
                 },
                 template="plotly_white",
+            )
+            st.caption(
+                "Error bars show 95% Wilson confidence intervals. Hover a point for its "
+                "trial count (n) — a point with few trials can have a wide interval even "
+                "when its center looks decisive."
             )
             fig_scatter.update_traces(
                 marker=dict(size=14, color="#4F46E5", symbol="circle"),

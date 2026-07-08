@@ -211,6 +211,7 @@ async def run_pair_loop(
     target_max_tokens: int = 512,
     existing_turns: Optional[list[dict]] = None,
     on_turn_complete: Optional[Callable[[dict], None]] = None,
+    repeat_index: int = 0,
 ) -> dict:
     """Execute multi-turn PAIR adversarial refinement loop for a single objective."""
     if client is None:
@@ -352,6 +353,7 @@ async def run_pair_loop(
                 "source": objective.get("source", "Unknown"),
                 "goal": goal,
                 "target_model": target_model,
+                "repeat_index": repeat_index,
                 "turns": turns_log,
                 "final_compliance": turns_log[-1]["metrics"]["compliance"] if turns_log else 0.0,
                 "early_stopped": early_stopped,
@@ -370,6 +372,7 @@ async def run_pair_loop(
         "source": objective.get("source", "Unknown"),
         "goal": goal,
         "target_model": target_model,
+        "repeat_index": repeat_index,
         "turns": turns_log,
         "final_compliance": turns_log[-1]["metrics"]["compliance"] if turns_log else 0.0,
         "early_stopped": early_stopped,

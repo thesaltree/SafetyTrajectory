@@ -45,6 +45,7 @@ async def orchestrate(
     dry_run: bool,
     output_file: Path,
     max_concurrency: int = DEFAULT_MAX_CONCURRENCY,
+    repeats: int = 1,
 ) -> None:
     logger.info("Loading seed prompts…")
     seed_prompts = load_seed_prompts()
@@ -54,17 +55,22 @@ async def orchestrate(
 
     objectives = merge_objectives(seed_prompts, advbench_prompts)
     logger.info(
-        "Objective pool ready: %d objectives × %d models = %d total runs",
+        "Objective pool ready: %d objectives × %d models × %d repeats = %d total trajectories",
         len(objectives),
         len(target_models),
-        len(objectives) * len(target_models),
+        repeats,
+        len(objectives) * len(target_models) * repeats,
     )
 
     if dry_run:
         logger.info("=== DRY RUN ===")
         for obj in objectives:
             for model in target_models:
-                logger.info("  [DRY RUN] Would evaluate: %s → %s", obj["objective_id"], model)
+                for repeat_index in range(repeats):
+                    logger.info(
+                        "  [DRY RUN] Would evaluate: %s#%d → %s",
+                        obj["objective_id"], repeat_index, model
+                    )
         return
 
     output_file.parent.mkdir(parents=True, exist_ok=True)
@@ -78,23 +84,27 @@ async def orchestrate(
         except (json.JSONDecodeError, OSError) as exc:
             logger.warning("Could not load existing results (%s). Starting fresh.", exc)
 
+    # repeat_index defaults to 0 for pre-existing result files recorded before
+    # --repeats was added, so old single-trial runs still resume correctly.
     results_map = {
-        (r["objective_id"], r["target_model"]): r for r in existing_results
+        (r["objective_id"], r["target_model"], r.get("repeat_index", 0)): r
+        for r in existing_results
     }
 
     client = get_async_client()
     semaphore = asyncio.Semaphore(max_concurrency)
 
-    def make_save_callback(k: tuple[str, str]):
+    def make_save_callback(k: tuple[str, str, int]):
         def save_callback(current_traj: dict):
             results_map[k] = current_traj
             with open(output_file, "w", encoding="utf-8") as f:
                 json.dump(list(results_map.values()), f, indent=2, ensure_ascii=False)
         return save_callback
 
-    async def process(obj: dict, target_model: str) -> None:
-        key = (obj["objective_id"], target_model)
+    async def process(obj: dict, target_model: str, repeat_index: int) -> None:
+        key = (obj["objective_id"], target_model, repeat_index)
         existing_traj = results_map.get(key)
+        label = f"{obj['objective_id']}#{repeat_index}"
 
         if existing_traj:
             has_enough_turns = len(existing_traj.get("turns", [])) >= max_turns
@@ -102,12 +112,12 @@ async def orchestrate(
             if has_enough_turns or is_early_stopped:
                 logger.info(
                     "Skipping %s → %s (already completed: %d turns)",
-                    obj["objective_id"], target_model, len(existing_traj.get("turns", []))
+                    label, target_model, len(existing_traj.get("turns", []))
                 )
                 return
             logger.info(
                 "Resuming %s → %s from turn %d",
-                obj["objective_id"], target_model, len(existing_traj["turns"]) + 1
+                label, target_model, len(existing_traj["turns"]) + 1
             )
 
         async with semaphore:
@@ -120,29 +130,31 @@ async def orchestrate(
                     target_max_tokens=target_max_tokens,
                     existing_turns=existing_traj.get("turns") if existing_traj else None,
                     on_turn_complete=make_save_callback(key),
+                    repeat_index=repeat_index,
                 )
                 results_map[key] = trajectory
                 with open(output_file, "w", encoding="utf-8") as f:
                     json.dump(list(results_map.values()), f, indent=2, ensure_ascii=False)
                 logger.info(
                     "✓ Completed trajectory: %s → %s  (total records: %d)",
-                    obj["objective_id"],
+                    label,
                     target_model,
                     len(results_map),
                 )
             except Exception as exc:
                 logger.error(
                     "Unhandled error for %s → %s: %s. Skipping.",
-                    obj["objective_id"],
+                    label,
                     target_model,
                     exc,
                     exc_info=True,
                 )
 
     await asyncio.gather(*(
-        process(obj, target_model)
+        process(obj, target_model, repeat_index)
         for obj in objectives
         for target_model in target_models
+        for repeat_index in range(repeats)
     ))
 
     logger.info(
@@ -184,6 +196,16 @@ def parse_args() -> argparse.Namespace:
         help=f"Number of AdvBench prompts (default: {DEFAULT_ADVBENCH_N})",
     )
     parser.add_argument(
+        "--repeats",
+        type=int,
+        default=1,
+        help=(
+            "Independent trials per (objective, model) pair (default: 1). "
+            "A single trial produces a noisy point estimate of jailbreak rate; "
+            "increase this for a real sample size."
+        ),
+    )
+    parser.add_argument(
         "--max-concurrency",
         type=int,
         default=DEFAULT_MAX_CONCURRENCY,
@@ -211,6 +233,7 @@ def main() -> None:
     logger.info("  Max turns     : %d", args.max_turns)
     logger.info("  Max tokens    : %d", args.target_max_tokens)
     logger.info("  AdvBench N    : %d", args.advbench_n)
+    logger.info("  Repeats       : %d", args.repeats)
     logger.info("  Max concurrency: %d", args.max_concurrency)
     logger.info("  Dry run       : %s", args.dry_run)
     logger.info("  Output file   : %s", args.output)
@@ -224,6 +247,7 @@ def main() -> None:
             dry_run=args.dry_run,
             output_file=Path(args.output),
             max_concurrency=args.max_concurrency,
+            repeats=args.repeats,
         )
     )
 
