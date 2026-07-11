@@ -1017,6 +1017,7 @@ def main() -> None:
             .rename(columns=delivery_labels)
             .reset_index()
         )
+        pivot.columns.name = None  # unstack() leaves a stale columns.name that crashes pyarrow serialization
         st.dataframe(pivot, use_container_width=True, hide_index=True)
 
     elif selected_tab == "Time to Harm & Drift":
@@ -1114,6 +1115,7 @@ def main() -> None:
             .rename(columns=drift_labels)
             .reset_index()
         )
+        cat_drift.columns.name = None  # unstack() leaves a stale columns.name that crashes pyarrow serialization
         st.dataframe(cat_drift, use_container_width=True, hide_index=True)
 
     st.markdown(
