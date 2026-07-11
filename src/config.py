@@ -3,8 +3,9 @@ from openai import AsyncOpenAI
 
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 
-ATTACKER_MODEL = "openai/gpt-4o-mini"
-JUDGE_MODEL = "openai/gpt-4o-mini"
+# Different provider family than the attacker by default — avoids correlated blind spots.
+ATTACKER_MODEL = os.getenv("ATTACKER_MODEL", "openai/gpt-4o-mini")
+JUDGE_MODEL = os.getenv("JUDGE_MODEL", "anthropic/claude-haiku-4.5")
 
 DEFAULT_MAX_TURNS = 10
 DEFAULT_TEMPERATURE_ATTACKER = 1.0

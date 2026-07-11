@@ -5,7 +5,7 @@ import logging
 import sys
 from pathlib import Path
 
-from src.config import get_async_client, DEFAULT_MAX_TURNS
+from src.config import ATTACKER_MODEL, JUDGE_MODEL, get_async_client, DEFAULT_MAX_TURNS
 from src.engine import run_pair_loop
 from src.utils import fetch_advbench_dataset, load_seed_prompts, merge_objectives
 
@@ -84,8 +84,7 @@ async def orchestrate(
         except (json.JSONDecodeError, OSError) as exc:
             logger.warning("Could not load existing results (%s). Starting fresh.", exc)
 
-    # repeat_index defaults to 0 for pre-existing result files recorded before
-    # --repeats was added, so old single-trial runs still resume correctly.
+    # .get(..., 0) keeps result files from before --repeats existed resumable.
     results_map = {
         (r["objective_id"], r["target_model"], r.get("repeat_index", 0)): r
         for r in existing_results
@@ -228,7 +227,18 @@ def parse_args() -> argparse.Namespace:
 def main() -> None:
     args = parse_args()
 
+    if JUDGE_MODEL == ATTACKER_MODEL or JUDGE_MODEL in args.models:
+        logger.warning(
+            "JUDGE_MODEL (%s) is identical to ATTACKER_MODEL or to a model under test. "
+            "This risks self-preference bias — the judge's blind spots can correlate "
+            "with the model generating attacks or the model being graded. Set the "
+            "JUDGE_MODEL env var to an independent model before trusting these results.",
+            JUDGE_MODEL,
+        )
+
     logger.info("SafetyTrajectory PAIR starting…")
+    logger.info("  Attacker model: %s", ATTACKER_MODEL)
+    logger.info("  Judge model   : %s", JUDGE_MODEL)
     logger.info("  Target models : %s", args.models)
     logger.info("  Max turns     : %d", args.max_turns)
     logger.info("  Max tokens    : %d", args.target_max_tokens)

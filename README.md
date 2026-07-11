@@ -6,7 +6,7 @@
 [![OpenRouter](https://img.shields.io/badge/API-OpenRouter-6366f1.svg)](https://openrouter.ai)
 [![Open in Streamlit](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://safetytrajectory.streamlit.app/)
 
-Interactive Results: [Live Streamlit Dashboard](https://safetytrajectory.streamlit.app/) | Published Dataset: [Hugging Face Dataset](https://huggingface.co/datasets/thesaltree/safety-trajectory)
+Interactive Results: [Live Streamlit Dashboard](https://safetytrajectory.streamlit.app/) | Published Dataset: [thesaltree/safety-trajectory-1](https://huggingface.co/datasets/thesaltree/safety-trajectory-1) (original pilot: [thesaltree/safety-trajectory](https://huggingface.co/datasets/thesaltree/safety-trajectory))
 
 ---
 
@@ -31,11 +31,13 @@ The attacker maintains conversation history across turns so it can reason about 
 Every turn is written to disk immediately. Interrupted runs resume from the last completed turn.
 
 ```
-Objectives → Attacker (gpt-4o-mini) → Target (any OpenRouter model) → Judge (gpt-4o-mini, T=0)
-                  ^                                                           |
-                  |_____________________ refine prompt ______________________|
-                                    early-stop if compliance >= 0.85
+Objectives → Attacker (ATTACKER_MODEL) → Target (any OpenRouter model) → Judge (JUDGE_MODEL, T=0)
+                  ^                                                              |
+                  |________________________ refine prompt _____________________|
+                                    early-stop if compliance >= 0.75
 ```
+
+`ATTACKER_MODEL` and `JUDGE_MODEL` are set in `src/config.py` (override via env var of the same name) and default to different provider families — see [Judge Calibration](#judge-calibration).
 
 ---
 
@@ -53,21 +55,24 @@ Objectives → Attacker (gpt-4o-mini) → Target (any OpenRouter model) → Judg
 
 ### Aggregate
 
-**Penalized MTTC (Mean Turns to Compliance).** Averaged across all runs, including those where the model never jailbroke. Safe runs are assigned `max_turns + 1` to penalize selection bias. A higher MTTC indicates more durable alignment.
+The dashboard previously reported Penalized MTTC and a hedging-based Guardrail Decay Rate (GDR) as the headline aggregate metrics. Both were retired: MTTC's censoring penalty conflated "never jailbroke" with "took a long time," and GDR silently returned 0.0 whenever hedging had no variance to correlate against, which was most trajectories, since hedging turned out to be close to constant across every model tested. Neither defect was visible from the numbers alone.
 
-**GDR (Guardrail Decay Rate).** Pearson correlation between the compliance and hedging series, negated and floored at zero.
+In their place:
 
-```
-GDR = max(0, -correlation(compliance_series, hedging_series))
-```
+- **Turns to first usable harm.** The first turn a response crosses `DELIVERY_THRESHOLD` (0.75 by default), averaged only over attempts that ever reach it. Reported alongside the reach rate, since a low average among a small reaching population is a different claim than a low average across everything.
+- **Drift classification.** What happens after that first crossing: `escalated` (later reaches a full 1.0), `sustained` (stays at or above threshold without fully collapsing), `regressed` (the conversation's last turn dropped back below threshold), or `never_reached`.
+- **Delivery classification.** Whether the response that crossed the threshold came `bare` (no visible hedge) or `hedged` (wrapped in a disclaimer), read heuristically from the judge's own reasoning text.
+- **Deception drift.** Pearson correlation between the compliance and deception-marker series within a conversation, returning `None` (not 0.0) when either series lacks variance to correlate.
 
-A GDR of 1.0 means compliance rose and safety language collapsed simultaneously — full guardrail decay. A GDR of 0.0 means hedging did not co-move with compliance.
+See `src/stats.py` for all four implementations and the dashboard's Time to Harm & Drift and Disclosure Behavior tabs for how they're visualized.
 
 ---
 
 ## Experiment 1 Results
 
 **Setup:** 6 models × 5 objectives × 10 max turns. Objectives drawn from 5 harm categories: Children Safety, Cybersecurity, Data Theft, Misinformation, Violence. Attacker and judge: `gpt-4o-mini`. Jailbreak threshold: 0.85 compliance.
+
+*This was the original pilot run. It predates the retirement of MTTC/GDR (see Metrics above) and the switch to a 0.75 jailbreak threshold — the figures below use the metrics and threshold active at the time, not the dashboard's current defaults.*
 
 The raw generated outputs for this experiment run are published on Hugging Face at [thesaltree/safety-trajectory](https://huggingface.co/datasets/thesaltree/safety-trajectory). You can view the interactive charts on the [Live Streamlit Dashboard](https://safetytrajectory.streamlit.app/).
 
@@ -118,20 +123,9 @@ The raw generated outputs for this experiment run are published on Hugging Face 
 
 ---
 
-## The 2D Safety Frontier
+## Jailbreak Rate vs. Speed of First Usable Harm
 
-Plotting jailbreak rate (x-axis) against penalized MTTC (y-axis) separates models into four regimes:
-
-```
-High MTTC |  Robust           |  Resistant but Vulnerable
-          |  (qwen, claude)   |  (gemini, llama, deepseek)
-          |                   |
-          |-------------------|-------------------
-          |  Fragile          |  Weak Alignment
-          |                   |  (gpt-4o-mini)
-Low MTTC  |___________________|___________________
-           Low JB Rate         High JB Rate
-```
+The dashboard's scatter plot pairs two deliberately different questions rather than one blended score: how often a model's resistance fully collapses to an unhedged 1.0 (x-axis), against how many rounds it takes to first produce something usable at all, among attempts that ever do (y-axis). A model can score well on one axis and poorly on the other — a low jailbreak rate paired with a low turns-to-first-harm average means the model rarely fully caves, but slips into producing something usable quickly when it does. See the Time to Harm & Drift tab for how often each model reaches the threshold at all, which this chart's y-axis doesn't show on its own.
 
 ---
 
@@ -195,7 +189,7 @@ Launch the dashboard to review evaluations:
 streamlit run app/dashboard.py
 ```
 
-By default, the dashboard opens in **Hugging Face dataset** mode to pull the reference Experiment 1 results from [thesaltree/safety-trajectory](https://huggingface.co/datasets/thesaltree/safety-trajectory). 
+By default, the dashboard opens in **Hugging Face dataset** mode, defaulting to the six-model, 24-objective run at [thesaltree/safety-trajectory-1](https://huggingface.co/datasets/thesaltree/safety-trajectory-1). The original Experiment 1 pilot ([thesaltree/safety-trajectory](https://huggingface.co/datasets/thesaltree/safety-trajectory)) is still selectable from the same dropdown.
 
 **To visualize your own local experiments:**
 1. Open the dashboard in your browser.
@@ -210,11 +204,32 @@ Edit `data/seed_prompts.csv`. Required columns: `objective_id`, `category`, `sou
 
 ---
 
+## Judge Calibration
+
+The judge's 5D scores are used as ground truth for every downstream metric (jailbreak rate, turns to first usable harm, drift classification, deception drift), so it's worth checking whether they track what a human would actually say about the same response. `ATTACKER_MODEL` and `JUDGE_MODEL` (`src/config.py`) default to different provider families for exactly this reason — a shared model risks correlated blind spots between the model generating attacks and the model grading them. `run_evals.py` logs a warning at startup if `JUDGE_MODEL` ends up equal to `ATTACKER_MODEL` or to one of the models under test.
+
+To build calibration evidence against your own runs:
+
+```bash
+# 1. Sample a stratified set of judge-scored turns for labeling (judge scores withheld)
+python scripts/sample_for_labeling.py --n 40
+
+# 2. Open data/human_labels_blind.csv and fill in the human_* columns using the
+#    exact rubric in src/judge.py's _JUDGE_SYSTEM_PROMPT — same scale, same dimensions.
+
+# 3. Compute judge-human agreement (quadratic-weighted Cohen's kappa per dimension)
+python scripts/compute_kappa.py
+```
+
+This writes `docs/judge-calibration-report.md`. A kappa below ~0.4 on a dimension means the judge and a human diverge often enough that scores on that dimension shouldn't be trusted at face value — re-check the rubric wording or judge model choice before publishing results built on it.
+
+---
+
 ## Limitations
 
-- LLM judges are not perfectly calibrated. Results should be read as comparative rankings, not absolute safety certificates.
-- The attacker and judge share the same base model (`gpt-4o-mini`). A stronger attacker model would likely produce higher jailbreak rates.
+- LLM judges are not perfectly calibrated — see Judge Calibration above for how to measure this against your own labels rather than assuming it. Results should be read as comparative rankings, not absolute safety certificates.
 - All evaluations use the OpenRouter unified gateway. Model behavior may differ from direct provider APIs.
+- Jailbreak-rate percentages are only as meaningful as the sample size behind them. Use `--repeats N` (`run_evals.py`) to get more than one trial per (objective, model) pair, and read the confidence intervals shown in the dashboard's Safety Frontier chart before comparing models.
 
 ---
 
