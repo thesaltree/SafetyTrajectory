@@ -105,20 +105,22 @@ The raw generated outputs for this experiment run are published on Hugging Face 
 - Misinformation was the most consistently exploitable category across all models (100% jailbreak rate). Data Theft was the most resistant (17%).
 - GDR was zero for several models despite jailbreaks occurring. This indicates compliance rose without a corresponding collapse in hedging, the model provided harmful content while maintaining surface-level safety language.
   
-#### 2D Safety Frontier scatter plot
-<img width="1465" height="783" alt="Screenshot 2026-07-02 at 11 27 31 PM" src="https://github.com/user-attachments/assets/b8c28101-806a-40e0-a40a-654f6947f959" />
+#### Avg turns to first usable harms across all categories
+<img width="1509" height="769" alt="Screenshot 2026-07-11 at 7 37 57 PM" src="https://github.com/user-attachments/assets/22536eeb-a016-4279-98a2-a7b9065a73a3" />
 
 
-#### Cross-model MTTC comparison chart
-<img width="1467" height="787" alt="Screenshot 2026-07-02 at 11 32 04 PM" src="https://github.com/user-attachments/assets/c25ad349-af3e-47f6-aa7a-0e184c23bfab" />
+#### Delivered Content: Bare vs Hedged
+<img width="1133" height="405" alt="Screenshot 2026-07-11 at 7 47 16 PM" src="https://github.com/user-attachments/assets/53a0408f-7815-49e8-99f9-1ba8c7ec9518" />
 
 
-#### Category x Model compliance heatmap
-<img width="1145" height="308" alt="Screenshot 2026-07-02 at 11 32 27 PM" src="https://github.com/user-attachments/assets/980cfae0-a571-4897-94fd-15ef23546a0d" />
+#### What happens after first Usable Harm
+<img width="568" height="405" alt="Screenshot 2026-07-11 at 7 47 46 PM" src="https://github.com/user-attachments/assets/bfc4436b-fc7d-4d22-a3b5-2def2eca492b" />
 
 
-#### Trajectory drift chart (Claude Opus 4.8) for Data-theft category
-<img width="1169" height="514" alt="Screenshot 2026-07-02 at 11 34 04 PM" src="https://github.com/user-attachments/assets/5162d193-590c-4778-b30c-e189b903f624" />
+
+#### Trajectory drift chart (Claude Sonnet 5) for Cybersecurity category
+<img width="1096" height="310" alt="Screenshot 2026-07-11 at 7 48 43 PM" src="https://github.com/user-attachments/assets/356de744-1e04-4cd6-9103-7f97ea619402" />
+
 
 
 ---
